@@ -74,7 +74,7 @@ class data_extraction:
         
     def get_token(self):
         command = [f'curl -s -d "client_id={self.config.oidc_client_id}"']
-        command.append('-d "client_secret=%s"'%"uC2pdaxozGkI8iJh7TqfJKzoKfIa")
+        command.append('-d "client_secret=%s"'%self.config.oidc_client_secret)
         command.append('-d "username=%s"'%self.credentials[0])
         command.append('-d "password=%s"'%self.credentials[1])
         command.append('-d "grant_type=password"')
