@@ -1,0 +1,58 @@
+{
+  "datasetId": "EO:ECMWF:DAT:SIS_AGROMETEOROLOGICAL_INDICATORS",
+  "boundingBoxValues": [
+    {
+      "name": "area",
+      "bbox": [
+        5.139675926686226,
+        52.17217026352144,
+        5.8635591352846435,
+        52.48021777571928
+      ]
+    }
+  ],
+  "multiStringSelectValues": [
+    {
+      "name": "statistic",
+      "value": [
+        "24_hour_mean",
+        "24_hour_minimum",
+        "24_hour_maximum"
+      ]
+    },
+    {
+      "name": "year",
+      "value": [
+        "2021"
+      ]
+    },
+    {
+      "name": "month",
+      "value": [
+        "05"
+      ]
+    },
+    {
+      "name": "day",
+      "value": [
+        "01"
+      ]
+    },
+    {
+      "name": "time",
+      "value": [
+        "09_00"
+      ]
+    }
+  ],
+  "stringChoiceValues": [
+    {
+      "name": "variable",
+      "value": "2m_temperature"
+    },
+    {
+      "name": "format",
+      "value": "zip"
+    }
+  ]
+}

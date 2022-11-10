@@ -1,0 +1,27 @@
+{
+  "datasetId": "EO:EEA:DAT:CLMS_HRVPP_ST",
+  "boundingBoxValues": [
+    {
+      "name": "bbox",
+      "bbox": [
+        5.139675926686226,
+        52.17217026352144,
+        5.8635591352846435,
+        52.48021777571928
+      ]
+    }
+  ],
+  "dateRangeSelectValues": [
+    {
+      "name": "temporal_interval",
+      "start": "2021-05-01T00:00:00.000Z",
+      "end": "2021-05-11T00:00:00.000Z"
+    }
+  ],
+  "stringChoiceValues": [
+    {
+      "name": "productType",
+      "value": "PPI"
+    }
+  ]
+}
