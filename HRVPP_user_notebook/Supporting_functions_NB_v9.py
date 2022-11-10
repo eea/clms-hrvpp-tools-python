@@ -8,6 +8,7 @@ import concurrent.futures
 from tqdm.auto import tqdm
 from datetime import datetime, date
 
+
 #raster/s3 packages
 import boto3
 from rasterio.session import AWSSession
@@ -20,6 +21,8 @@ import shapely
 from shapely.geometry import Point, shape
 from pyproj import Transformer, CRS
 import shapefile
+from affine import Affine
+
 
 #matrix packages
 import numpy as np
@@ -39,7 +42,7 @@ from pandas.plotting import register_matplotlib_converters
 ##########################
           
 class data_extraction:
-    def __init__(self, header_file, credentials, config, catalogue, version, tile, xoff, yoff, N_pixel_window, shape, fill_value=0):
+    def __init__(self, header_file, credentials, config, catalogue, version, tile, xoff, yoff, N_pixel_window, shape, years, fill_value=0):
         self.header_file = header_file
         self.credentials = credentials
         self.config = config
@@ -48,6 +51,7 @@ class data_extraction:
         self.tile = tile
         self.xoff = xoff
         self.yoff = yoff
+        self.years = years
         self.N_pixel_window = N_pixel_window
         if N_pixel_window ==0 :
             self.shape = shape
@@ -88,7 +92,7 @@ class data_extraction:
     
 
 class VI_class(data_extraction):
-    def __init__(self, header_file, credentials ,config, catalogue, version, tile, xoff, yoff, N_pixel_window, shape, option_PPI, option_NDVI, fill_value=-32768):
+    def __init__(self, header_file, credentials ,config, catalogue, version, tile, xoff, yoff, N_pixel_window, shape, option_PPI, option_NDVI, years, fill_value=-32768):
         self.option_PPI = option_PPI
         self.option_NDVI = option_NDVI
         self.dict_VI_TS = {}
@@ -96,16 +100,19 @@ class VI_class(data_extraction):
         self.dict_no_data_QF2 = {}
         self.dict_VI_df = {}
 
-        super().__init__(header_file,credentials,config,catalogue, version,  tile, xoff, yoff, N_pixel_window, shape, fill_value=fill_value)
+        super().__init__(header_file,credentials,config,catalogue, version,  tile, xoff, yoff, N_pixel_window, shape, years, fill_value=fill_value)
         
         
     ## FUNCTION TO BUILD_UP VI FILELIST FROM WEKEO:
     def build_vi_list(self, VI_name='PPI'):
         vi_list = list(self.catalogue.get_products(f"copernicus_r_utm-wgs84_10_m_hrvpp-vi_p_2017-now_{self.version}", 
                                        tileId=self.tile,
-                                       productType=VI_name))
+                                       productType=VI_name,
+                                       start=date(int(self.years[0]), 1, 1),
+                                       end=date(int(self.years[-1]), 12, 31)))
 
-
+        if len(vi_list) == 0:
+            log.error("No data found for the years given, please check your years to be extracted.")
         df_vi = pd.DataFrame(vi_list, columns=['DL'])
         df_vi['path']= df_vi.applymap(lambda x: x.data[0].href)
         df_temp = df_vi["path"].str.split("_", n=3, expand=True)
@@ -145,9 +152,9 @@ class VI_class(data_extraction):
                                                        out_shape=(window.height, 
                                                                   window.width,
                                                                  ),
-                                                       transform=transform,
+                                                       transform=transform * Affine.translation(window.col_off, window.row_off),
                                                        all_touched=False,
-                                                       invert=True)
+                                                       invert=False)
                                 N_pixel_window = (window.width + window.height) / 2
                             else: 
                                 N_pixel_window = self.N_pixel_window 
@@ -156,17 +163,17 @@ class VI_class(data_extraction):
                     
                             
                             
-        data = np.zeros((len(product_locations),window.width,window.height))
-        qf_array = np.zeros((len(product_locations),window.width,window.height))
+        data = np.zeros((len(product_locations),window.height,window.width))
+        qf_array = np.zeros((len(product_locations),window.height,window.width))
         max_length = 300
-        if len(product_locations) > max_length:
-            for chunk in range(0,len(product_locations)//max_length):
-                intermed = time.time()
-                self.savetoken() 
-                data[chunk*max_length: min((chunk+1)*max_length,len(product_locations)),:,:] = np.asarray(self.loader.load_arrays(product_locations[chunk*max_length: min((chunk+1)*max_length,len(product_locations))],window)).astype(np.float).reshape(np.shape(data[chunk*max_length:min((chunk+1)*max_length,len(product_locations)),:,:]))
-                self.savetoken() 
-                qf_array[chunk*max_length: min((chunk+1)*max_length,len(product_locations)),:,:] = np.asarray(self.loader.load_arrays(qf_locations[chunk*max_length: min((chunk+1)*max_length,len(product_locations))], window)).reshape(np.shape(data[chunk*max_length: min((chunk+1)*max_length,len(product_locations)),:,:]))
-                print('EXTRACTION VI CHUNK {}/{} FINISHED in {} mins\n'.format(chunk+1,len(product_locations)//max_length,(time.time()-intermed)/60))
+
+        for chunk in range(0,len(product_locations)//max_length + 1):
+            intermed = time.time()
+            self.savetoken() 
+            data[chunk*max_length: min((chunk+1)*max_length,len(product_locations)),:,:] = np.asarray(self.loader.load_arrays(product_locations[chunk*max_length: min((chunk+1)*max_length,len(product_locations))],window)).astype(np.float).reshape(np.shape(data[chunk*max_length:min((chunk+1)*max_length,len(product_locations)),:,:]))
+            self.savetoken() 
+            qf_array[chunk*max_length: min((chunk+1)*max_length,len(product_locations)),:,:] = np.asarray(self.loader.load_arrays(qf_locations[chunk*max_length: min((chunk+1)*max_length,len(product_locations))], window)).reshape(np.shape(data[chunk*max_length: min((chunk+1)*max_length,len(product_locations)),:,:]))
+            print('EXTRACTION VI CHUNK {}/{} FINISHED in {} mins\n'.format(chunk+1,len(product_locations)//max_length+1,(time.time()-intermed)/60))
         
         data[data!=no_data_VI]=data[data!=no_data_VI]*scale
         no_data_QF2 = 65535
@@ -278,9 +285,8 @@ class phenology_class(data_extraction):
         self.df_VPP =  pd.DataFrame()
         self.ST_TS = []  
         self.df_ST = pd.DataFrame()
-        self.years = years
 
-        super().__init__(header_file,credentials,config,catalogue, version, tile, xoff, yoff, N_pixel_window, shape, fill_value=0)
+        super().__init__(header_file,credentials,config,catalogue, version, tile, xoff, yoff, N_pixel_window, shape, years, fill_value=0)
         
     def extract_phenology_data(self):   
         #for easier typeing
@@ -320,9 +326,10 @@ class phenology_class(data_extraction):
                                                out_shape=(window.height, 
                                                           window.width,
                                                          ),
-                                               transform=transform,
+                                               transform=transform * Affine.translation(window.col_off, window.row_off),
                                                all_touched=False,
-                                               invert=True)
+                                               invert=False)
+                       
                         N_pixel_window = (window.width + window.height) / 2
                     else: 
                         N_pixel_window = self.N_pixel_window 
@@ -331,8 +338,6 @@ class phenology_class(data_extraction):
 
         data = np.asarray(self.loader.load_arrays(product_locations , window)).astype(np.float)
         data[data!=self.no_data_ST] = data[data!=self.no_data_ST]*scale
-        print(np.shape(polygon_mask))
-        print(np.shape(data))
 
         if N_pixel_window > 1:
             if self.N_pixel_window == 0:
@@ -628,7 +633,7 @@ def get_centroid(shp_file):
     return latlon_to_S2(centroid.coords[0][1], centroid.coords[0][0])
 
 def plot_box(header_file, credentials, config, catalogue, version, tile, xoff, yoff, parameter = 'MAXV', year=2018, box=200):
-    data_ex = data_extraction(header_file, credentials, config, catalogue, version, tile, xoff, yoff, N_pixel_window = box, shape=None, fill_value=-32768)
+    data_ex = data_extraction(header_file, credentials, config, catalogue, version, tile, xoff, yoff, N_pixel_window = box, shape=None, years=[str(year)], fill_value=-32768)
     
     data_ex.savetoken()
     
@@ -643,7 +648,6 @@ def plot_box(header_file, credentials, config, catalogue, version, tile, xoff, y
     file = product.data[0].href
     with  rasterio.Env(**data_ex.rio_gdal_options) as env:
         with rasterio.open(file, 'r') as ds:
-            # print(ds.profile)
             try:
                 array = ds.read(1, window=Window(int(xoff / 10 - box / 2), int(yoff / 10 - box / 2), box, box))
             except:
@@ -769,8 +773,6 @@ def plot_VPP_ST(phenology_data, VI_data, pt, outdir = None, save_plot = False):
     handles.append(mpatches.Patch(color='black', linestyle='-', linewidth=1, fill=False, label='dates_s2'))
     # plot the legend
     ax1.legend(handles=handles, loc='upper right')
-
-    # ax1.legend(loc='upper right')
     ax1.set_xlabel('Date')
     if phenology_data.N_pixel_window ==0:
         plt.title(
